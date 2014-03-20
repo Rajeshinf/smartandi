@@ -5,6 +5,7 @@ import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.json.JSONException;
 import org.junit.Test;
 
 import com.briotribes.smartapi.SmartClientUtils;
@@ -12,7 +13,7 @@ import com.briotribes.smartapi.SmartConfig;
 
 public class SmartClientUtilsTest {
 	@Test
-	public void testSubmitToSmart() throws IOException, URISyntaxException {
+	public void testSubmitToSmart() throws IOException, URISyntaxException, JSONException {
 		SmartConfig config = new SmartConfig();
 		config.server = "128.199.233.96";
 		config.tenant = "gocharlie";

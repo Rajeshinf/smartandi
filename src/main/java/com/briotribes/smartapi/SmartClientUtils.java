@@ -1,13 +1,12 @@
 package com.briotribes.smartapi;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -21,8 +20,9 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.protocol.HTTP;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class SmartClientUtils {
 
@@ -32,14 +32,14 @@ public class SmartClientUtils {
 			.getLogger(SmartClientUtils.class.getName());
 
 	public static SmartResponse submitToSmart(SmartConfig config,
-			String smarttenant, String smartflow, String eventName, Object data)
-			throws IOException, URISyntaxException {
+			String smarttenant, String smartflow, String eventName, Map data)
+			throws IOException, URISyntaxException, JSONException {
 		HttpResponse response = connectToSmart(config,
 				buildUri(config, smarttenant, smartflow, eventName), data);
 		return createResponse(response);
 	}
 
-	private static HttpResponse connectToSmart(SmartConfig config, URI uri, Object data)
+	private static HttpResponse connectToSmart(SmartConfig config, URI uri, Map data)
 			throws ClientProtocolException, IOException {
 		HttpClient client = new DefaultHttpClient();
 		HttpPost post = new HttpPost();
@@ -48,9 +48,9 @@ public class SmartClientUtils {
 		client.getParams().setParameter("http.socket.timeout", new Integer(0));
 		if (notNullNotBlank(config.origin))
 			post.setHeader("origin", config.origin);
-		Gson gson = new Gson();
+        JSONObject json = new JSONObject(data);
 
-		StringEntity entity = new StringEntity(gson.toJson(data), HTTP.UTF_8);
+		StringEntity entity = new StringEntity(json.toString(), HTTP.UTF_8);
 		post.setEntity(entity);
 		LOGGER.log(Level.INFO, "\nSending 'POST' request to URL : " + uri);
 		for (Header j : post.getAllHeaders()) {
@@ -62,20 +62,24 @@ public class SmartClientUtils {
 	}
 
 	private static SmartResponse createResponse(HttpResponse response)
-			throws IOException {
-		Map<String, Object> data = new HashMap<String, Object>();
-		java.lang.reflect.Type mapType = new TypeToken<Map<String, Object>>() {
-		}.getType();
-		Gson gson = new Gson();
-		Reader reader = new InputStreamReader(response.getEntity().getContent());
-		data = gson.fromJson(reader, mapType);
+			throws IOException, JSONException {
+        BufferedReader rd = new BufferedReader(new InputStreamReader(response
+                .getEntity().getContent()));
+
+        StringBuffer result = new StringBuffer();
+        String line = "";
+        while ((line = rd.readLine()) != null) {
+            result.append(line);
+        }
+
+        JSONObject jsonData = new JSONObject(result.toString());
 
 		// Check if responses is present
-		List responses = (List) data.get("responses");
+		JSONArray responses = jsonData.getJSONArray("responses");
 		SmartResponse smartResponse = new SmartResponse();
-		if (responses != null && responses.size() > 0) {
+		if (responses != null && responses.length() > 0) {
 			// Extract the first item which will be Map of data
-			Map responseData = (Map) responses.get(0);
+            JSONObject responseData = responses.optJSONObject(0);
 
 			// Extract the unique response id for logging
 			smartResponse.setResponseid((String) responseData
@@ -83,8 +87,8 @@ public class SmartClientUtils {
 
 		}
 
-		LOGGER.log(Level.INFO, "The reponse has some content : " + data);
-
+		LOGGER.log(Level.INFO, "The response has some content : " + jsonData);
+		LOGGER.log(Level.INFO, "The smart response object is  : " + smartResponse);
 		return smartResponse;
 	}
 
