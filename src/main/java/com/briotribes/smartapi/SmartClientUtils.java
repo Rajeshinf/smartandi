@@ -50,9 +50,15 @@ public class SmartClientUtils {
 		int port = config.smartport;
 		String path = URL_SEPARATOR + smarttenant + URL_SEPARATOR + smartflow
 				+ URL_SEPARATOR + eventName;
+
 		if ((eventName.equals("UploadEvent"))
 				|| (eventName.equals("DownloadEvent"))) {
 			port = config.uploadport;
+			if (notNullNotBlank(config.portApiUploadMap)) {
+				path = URL_SEPARATOR + config.portApiUploadMap + path;
+			}
+		} else if (notNullNotBlank(config.portApiMap)) {
+			path = URL_SEPARATOR + config.portApiMap + path;
 		}
 		URI uri = new URI(config.protocol, null, config.server, port, path,
 				null, null);
@@ -95,10 +101,17 @@ public class SmartClientUtils {
 		LOGGER.log(Level.INFO, "Posting data with content : " + content);
 		HttpRequest request = requestFactory.buildPostRequest(url, content);
 		HttpHeaders header = new HttpHeaders();
-		header.set("Origin", config.origin);
-		request.setHeaders(header);
+		
+		//if (notNullNotBlank(config.origin))
+			//header.set("Origin", config.origin);
+		request = request.setHeaders(header);
 		response = request.execute();
 		LOGGER.log(Level.INFO, "The response received is  : " + response);
 		return response;
+	}
+
+	private static boolean notNullNotBlank(String checkString) {
+		return (checkString != null && !checkString.trim().equals(""));
+
 	}
 }

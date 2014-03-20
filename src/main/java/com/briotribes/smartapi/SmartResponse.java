@@ -44,7 +44,6 @@ public class SmartResponse {
 		this.response = response;
 	}
 
-	@Override
 	public String toString() {
 		return "SmartResponse [responseid=" + responseid + ", isError="
 				+ isError + ", message=" + message + ", response=" + response
