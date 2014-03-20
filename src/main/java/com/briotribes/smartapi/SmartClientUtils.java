@@ -6,29 +6,26 @@ import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.google.api.client.http.GenericUrl;
-import com.google.api.client.http.HttpContent;
-import com.google.api.client.http.HttpHeaders;
-import com.google.api.client.http.HttpRequest;
-import com.google.api.client.http.HttpRequestFactory;
-import com.google.api.client.http.HttpResponse;
-import com.google.api.client.http.HttpTransport;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.http.json.JsonHttpContent;
-import com.google.api.client.json.gson.GsonFactory;
+import org.apache.http.Header;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.protocol.HTTP;
+
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 public class SmartClientUtils {
 
-	private static final HttpTransport HTTP_TRANSPORT = new NetHttpTransport();
 	private static final String URL_SEPARATOR = "/";
 
 	private static final Logger LOGGER = Logger
@@ -37,14 +34,61 @@ public class SmartClientUtils {
 	public static SmartResponse submitToSmart(SmartConfig config,
 			String smarttenant, String smartflow, String eventName, Object data)
 			throws IOException, URISyntaxException {
-		GenericUrl smartURL = new GenericUrl(buildUrl(config, smarttenant,
-				smartflow, eventName));
-		JsonHttpContent content = new JsonHttpContent(new GsonFactory(), data);
-		HttpResponse response = postToSmart(config, smartURL, content);
+		HttpResponse response = connectToSmart(config,
+				buildUri(config, smarttenant, smartflow, eventName), data);
 		return createResponse(response);
 	}
 
-	private static URL buildUrl(SmartConfig config, String smarttenant,
+	private static HttpResponse connectToSmart(SmartConfig config, URI uri, Object data)
+			throws ClientProtocolException, IOException {
+		HttpClient client = new DefaultHttpClient();
+		HttpPost post = new HttpPost();
+		post.setURI(uri);
+		client.getParams().setParameter("http.protocol.expect-continue", true);
+		client.getParams().setParameter("http.socket.timeout", new Integer(0));
+		if (notNullNotBlank(config.origin))
+			post.setHeader("origin", config.origin);
+		Gson gson = new Gson();
+
+		StringEntity entity = new StringEntity(gson.toJson(data), HTTP.UTF_8);
+		post.setEntity(entity);
+		LOGGER.log(Level.INFO, "\nSending 'POST' request to URL : " + uri);
+		for (Header j : post.getAllHeaders()) {
+			System.out.println("Posting with " + j.getName() + " as "
+					+ j.getValue());
+		}
+		org.apache.http.HttpResponse response = client.execute(post);
+		return response;
+	}
+
+	private static SmartResponse createResponse(HttpResponse response)
+			throws IOException {
+		Map<String, Object> data = new HashMap<String, Object>();
+		java.lang.reflect.Type mapType = new TypeToken<Map<String, Object>>() {
+		}.getType();
+		Gson gson = new Gson();
+		Reader reader = new InputStreamReader(response.getEntity().getContent());
+		data = gson.fromJson(reader, mapType);
+
+		// Check if responses is present
+		List responses = (List) data.get("responses");
+		SmartResponse smartResponse = new SmartResponse();
+		if (responses != null && responses.size() > 0) {
+			// Extract the first item which will be Map of data
+			Map responseData = (Map) responses.get(0);
+
+			// Extract the unique response id for logging
+			smartResponse.setResponseid((String) responseData
+					.get("___smart_responseid___"));
+
+		}
+
+		LOGGER.log(Level.INFO, "The reponse has some content : " + data);
+
+		return smartResponse;
+	}
+
+	private static URI buildUri(SmartConfig config, String smarttenant,
 			String smartflow, String eventName) throws URISyntaxException,
 			MalformedURLException {
 		int port = config.smartport;
@@ -63,53 +107,9 @@ public class SmartClientUtils {
 		URI uri = new URI(config.protocol, null, config.server, port, path,
 				null, null);
 
-		return uri.toURL();
+		return uri;
 	}
-
-	private static SmartResponse createResponse(HttpResponse response)
-			throws IOException {
-		Map<String, Object> data = new HashMap<String, Object>();
-		java.lang.reflect.Type mapType = new TypeToken<Map<String, Object>>() {
-		}.getType();
-		Gson gson = new Gson();
-		Reader reader = new InputStreamReader(response.getContent());
-		data = gson.fromJson(reader, mapType);
-
-		// Check if responses is present
-		List responses = (List) data.get("responses");
-		SmartResponse smartResponse = new SmartResponse();
-		if (responses != null && responses.size() > 0) {
-			// Extract the first item which wil be Map of data
-			Map responseData = (Map) responses.get(0);
-
-			// Extract the unique response id for logging
-			smartResponse.setResponseid((String) responseData
-					.get("___smart_responseid___"));
-
-		}
-
-		LOGGER.log(Level.INFO, "The reponse has some content : " + data);
-
-		return smartResponse;
-	}
-
-	private static HttpResponse postToSmart(SmartConfig config, GenericUrl url,
-			HttpContent content) throws IOException {
-		HttpRequestFactory requestFactory = HTTP_TRANSPORT
-				.createRequestFactory();
-		HttpResponse response = null;
-		LOGGER.log(Level.INFO, "Posting data with content : " + content);
-		HttpRequest request = requestFactory.buildPostRequest(url, content);
-		HttpHeaders header = new HttpHeaders();
-		
-		//if (notNullNotBlank(config.origin))
-			//header.set("Origin", config.origin);
-		request = request.setHeaders(header);
-		response = request.execute();
-		LOGGER.log(Level.INFO, "The response received is  : " + response);
-		return response;
-	}
-
+	
 	private static boolean notNullNotBlank(String checkString) {
 		return (checkString != null && !checkString.trim().equals(""));
 
